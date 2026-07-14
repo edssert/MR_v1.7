@@ -72,6 +72,13 @@
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+/* [사용자 요청] 사진 확대 전용 pane(js/ui/split-view.js openMediaSplitPane)
+   은 사진 한 장 + 뷰 전환 버튼만 있어 세로 스크롤이 필요한 만큼 콘텐츠가
+   길어질 일이 없다 — 기본 overflow-y:auto 를 꺼서 스크롤바가 아예 뜨지
+   않게 한다. */
+.split-view__pane--media {
+  overflow-y: hidden;
+}
 
 /* [버그 수정] 이전에는 pane 안 이미지 영역을 140px/110px 로 축소하면서
    margin-bottom:16px/border-radius:10px 도 함께 얹었는데, 크기를 단일
@@ -110,6 +117,17 @@
 @keyframes split-swap {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* [사용자 요청] 사진 확대 pane 전용 퇴장 애니메이션 — split-in 의 역방향
+   (축소하며 페이드아웃). closeSplitPane2(js/ui/split-view.js) 가 X 클릭
+   시 이 클래스를 붙이고, animationend 시점에 실제로 DOM 에서 제거한다. */
+.split-view__pane--exit {
+  animation: split-out .18s ease both;
+}
+@keyframes split-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: scale(.98); }
 }
 
 /* ---------- 반응형: 좁은 화면에서는 세로 스택 ----------

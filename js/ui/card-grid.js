@@ -93,13 +93,27 @@ export function renderGrid({ resultsEl, countEl, filterPanelEl, data, state, sch
     // ── 그룹 헤더 클릭 → 해당 섹션만 접기/펼치기 (전체 재렌더링 없이 클래스
     // 토글만 하고, collapsedGroups 에 상태를 기록해 다음 renderGrid 호출
     // (필터 변경 등)에도 유지되게 한다). ──
+    const setCollapsed = (section, head, collapsed) => {
+      const key = section.dataset.groupKey;
+      section.classList.toggle("card-group--collapsed", collapsed);
+      head.setAttribute("aria-expanded", String(!collapsed));
+      if (collapsed) collapsedGroups.add(key); else collapsedGroups.delete(key);
+    };
+    // [사용자 요청] 버튼을 따로 보여주는 대신, 아무 그룹 헤더든 Ctrl/Cmd 를
+    // 누른 채 클릭하면 전체 펼치기/접기가 되게 한다 — 모달의 섹션 토글
+    // Ctrl+클릭(js/ui/modal.js wireSectionToggle)과 동일한 패턴. 클릭한
+    // 헤더 자신의 "다음 상태"를 기준으로 나머지 전체를 맞춘다.
     resultsEl.querySelectorAll(".card-group[data-group-key]").forEach(section => {
       const head = section.querySelector(".card-group__head");
-      head.addEventListener("click", () => {
-        const key = section.dataset.groupKey;
-        const nowCollapsed = section.classList.toggle("card-group--collapsed");
-        head.setAttribute("aria-expanded", String(!nowCollapsed));
-        if (nowCollapsed) collapsedGroups.add(key); else collapsedGroups.delete(key);
+      head.addEventListener("click", e => {
+        const collapseNext = !section.classList.contains("card-group--collapsed");
+        if (e.ctrlKey || e.metaKey) {
+          resultsEl.querySelectorAll(".card-group[data-group-key]").forEach(s => {
+            setCollapsed(s, s.querySelector(".card-group__head"), collapseNext);
+          });
+          return;
+        }
+        setCollapsed(section, head, collapseNext);
       });
     });
   } else {

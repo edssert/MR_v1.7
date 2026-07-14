@@ -9,6 +9,280 @@
 
 ---
 
+## v1.7 (2026-07-14) — 세션 7 (K1 Mechanical Safety 섹션 신규 추가)
+
+### 원문 데이터 정리
+`K1_OM_EN.pdf` "Mechanical safety" 섹션(p.31-33)을 pdfplumber 텍스트
+추출 + PyMuPDF 이미지 렌더링(p.31/32, 표 구조 재확인)으로 파싱. K1
+자체에 해당하는 부분만 발췌(K1-SB/KS28/CS1의 리깅 한계 표는 각자 제품
+데이터 몫이라 제외) — 사용자가 텍스트 설명 부분(Flown configurations
+일반 원칙, 경고 3개, Assessing mechanical safety 5개 항목)도 참고
+사항 토글로 가려질 테니 빠짐없이 정리해달라고 요청해 전문 번역 포함.
+`raw-data/raw-specs/la/speakers/k-series/k1.md`에 "출처 3" 섹션으로
+추가 — Flown/Stacked 표, 경고 3개, Assessing mechanical safety 5개
+항목(WLL 한계·Soundvision 모델링·안전계수 산정·그라운드스택 경고·2차
+안전장치·특수환경) 전문 반영.
+
+### 앱 데이터 반영
+- `js/domains/speakers/data/la/k-series.data.js`: K1 `presets` 객체
+  형제 필드로 `mechanicalSafety` 신규 — `flownRows`(K1-BUMP 2행 +
+  KARA-DOWNK1 다운필 1행), `stackedRows`(K1-CHARIOT 1행), `warnings`
+  (경고 3개, 배열), `notes`({text, subs?} 배열 — Safe/Maximum limit
+  정의, 2006/42/EC 준수 문구, Assessing mechanical safety 5개 항목을
+  subs로 중첩), `source`.
+- `js/domains/speakers/speakers.view.js`: `mechanicalSafetyHTML(d)`
+  신규 함수 — Preset Guide(`presetGuideHTML`)와 동급 레벨의
+  `data-section-toggle` 섹션(기본 접힘)으로 렌더. Flown/Stacked 표
+  2개는 섹션을 펼치면 항상 바로 보이고(Delay Defaults와 동일 패턴),
+  경고문은 `.mech-safety-warning`(항상 노출, danger 톤 강조 박스)으로,
+  참고 사항(notes)은 별도 하위 토글(`spk-mech-safety-notes`)로 접어
+  둔다. `modalBodyHTML` 마지막(`presetGuideHTML(d)` 다음)에
+  `${mechanicalSafetyHTML(d)}` 호출 추가.
+- `css/components/spec-table.css`: `.match-table--mech-safety`(4열:
+  구성/리깅 액세서리/safe limit/maximum limit, rigging accessory 열이
+  "14 K1 + 3 LA-RAK II AVB"급 길어 가장 넓게 잡음), `.mech-safety-warning`
+  (li마다 danger 톤 border-left + panel-2 배경 박스, 참고 사항의 흐린
+  footnote 스타일과 시각적으로 구분) 신규.
+
+### 검증
+`node --check`로 `k-series.data.js`/`speakers.view.js` 문법 오류 없음
+확인. 실제 브라우저 렌더링 확인은 사용자 재확인 필요.
+
+---
+
+## v1.7 (2026-07-14) — 세션 6 (사진 확대 pane 배경 클릭 close 시 onClose 누락 버그)
+
+### 증상
+사용자 리포트: Split View 오른쪽 pane2(다른 제품 모달)의 사진을 클릭해
+확대 pane(`js/ui/split-view.js openMediaSplitPane`)을 연 뒤, 오른쪽 위
+X 버튼이 아니라 화면 좌우 빈 공간(모달 오버레이 배경)을 클릭해 닫으면
+원래 pane2(사진 확대 이전의 다른 제품 모달)로 복원되지 않고 Split View
+자체가 완전히 꺼져 pane1만 남았다.
+
+### 원인
+`openMediaSplitPane`은 사진 확대 pane을 열 때 기존 pane2 DOM 노드를
+detach해서 클로저에 보관해두고, `openSplitPane({ onClose })`로 넘긴
+`onClose` 콜백(→ `restorePane2`)이 그 노드를 되살리는 구조다. 그런데
+이 `onClose`는 X 버튼(`closeBtn.onclick`, openSplitPane 내부)에서만
+호출되고 있었다. 배경 클릭은 `modal.js`의 `modalBgEl` 클릭 리스너 →
+`setSplitViewCloser(closeSplitView)`로 등록된 `closeSplitView()`
+(split-view.js)를 타는데, 이 함수는 `closeSplitPane2(modalEl,
+container)`만 호출할 뿐 pane2에 연결된 `onClose`를 전혀 몰랐다 — 그래서
+`restorePane2`가 실행되지 않고 `closeSplitPane2`의 기본 동작(Split
+View 완전 해제, pane1만 단일 모달로 복귀)만 일어났다.
+
+### 수정
+- `js/ui/split-view.js` `openSplitPane()`: pane2 생성 직후
+  `pane2._onClose = onClose || null;`로 콜백을 DOM 노드 자체에 매달아
+  둔다(모듈 스코프 변수 대신 노드에 붙인 이유: pane2가 교체될 때마다
+  자연스럽게 최신 콜백으로 갱신되고 별도 정리/추적이 필요 없음).
+- `js/ui/split-view.js` `closeSplitView()`: `closeSplitPane2` 호출
+  *전에* 현재 pane2의 `_onClose`를 읽어두고, `closeSplitPane2`가 pane2를
+  지운 *뒤에* 그 콜백을 호출 — X 버튼 경로(`closeBtn.onclick`)와 동일한
+  순서(닫기 → onClose)를 배경 클릭 경로에도 맞췄다. 사진 확대가 아닌
+  일반 pane2(앰프 등, `_onClose`가 없음)는 기존과 동일하게 그냥 Split
+  View가 닫힌다 — 회귀 없음.
+
+### 검증
+`node --check js/ui/split-view.js` 통과. 실제 브라우저 동작(사진 확대
+→ 배경 클릭 → 원래 pane2 복원) 확인은 사용자 재확인 필요.
+
+## v1.7 (2026-07-14) — 세션 6-2 (같은 세션, 후속) restorePane2 사진 영역 소실 버그
+
+### 증상
+사용자 재확인: 위 세션 6 수정 후 "배경 클릭 시 원래 pane2로 복원"
+자체는 되는데, 복원된 pane2(예: LA12X 앰프 모달)의 사진 영역이 비어
+보임(K1 단일 모달 → LA12X Split View → LA12X 사진 확대 → 배경 클릭
+재현 케이스).
+
+### 원인
+`modal.js` `wireMediaLightbox`는 사진 클릭 시 그 사진이 속한
+`.modal__media-wrap`에 `modal__media-wrap--collapsing`(max-height:0,
+opacity:0 — "사진이 위로 접히며 사라지는" 트랜지션용) 클래스를 건다.
+`openMediaSplitPane`이 확대 pane을 열기 위해 기존 pane2(LA12X)를
+detach할 때, 그 pane2 DOM 안의 wrap에는 이미 이 collapsing 클래스가
+걸려 있는 상태 그대로 보관된다. `closeSplitPane2`는 pane1(왼쪽)에
+대해서는 이 클래스를 정상적으로 떼어내는 로직이 있지만(371-391행 부근,
+`wrap.classList.remove(...)`), pane2를 되살리는 `restorePane2`에는
+동일한 처리가 없어 — 복원된 pane2가 collapsing 상태(높이 0·투명) 그대로
+남아 사진 영역이 비어 보였다.
+
+### 수정
+- `js/ui/split-view.js` `restorePane2()`: `pane2El` 복원 직후
+  `.modal__media-wrap--collapsing`를 찾아 클래스를 제거하는 처리 추가.
+
+### 검증
+`node --check js/ui/split-view.js` 통과. 실제 브라우저 재검증 필요.
+
+## v1.7 (2026-07-14) — 세션 6-3 (같은 세션, 후속) pane1 사진 collapsing 잔존 — pane2 "교체" 경로
+
+### 증상
+사용자 재확인: K1 pane1 + 사진 확대 pane2 상태에서, 오른쪽 확대뷰가
+아니라 왼쪽 K1 pane1 안의 다른 요소(Amplifier Matching의 LA12X 행)를
+클릭해 pane2를 LA12X로 바꾸면, 왼쪽 K1의 사진 영역이 계속 비어 있음
+(세션 6-2에서 고친 "복원(restorePane2)" 경로와는 다른 경로).
+
+### 원인
+세션 6-2에서 고친 `restorePane2`는 "사진 확대 pane을 닫고 원래 있던
+pane2로 되돌아가는" 경로에서만 실행된다. 이번 케이스는 그 경로를 타지
+않는다 — `speakers.controller.js` `wireSpeakerModalAmpClicks`의 앰프
+행 클릭 핸들러가 `openSplitPane`을 직접 호출하고,
+`openSplitPane`(split-view.js)은 "기존 pane2(oldPane2)를 그냥
+remove() 하고 새 pane2를 붙이는" 교체 로직만 갖고 있어
+`closeSplitPane2`도 `restorePane2`도 거치지 않는다. 즉 pane1(K1)에 걸린
+`modal__media-wrap--collapsing`를 풀어줄 코드 경로 자체가 없었다.
+
+### 수정
+- `js/ui/split-view.js` `openSplitPane()`: 기존 pane2(`oldPane2`)를
+  remove()하기 직전에, 그 pane2가 `split-view__pane--media`(사진 확대
+  전용 클래스)였는지 검사 — 맞으면 pane1의
+  `.modal__media-wrap--collapsing`를 찾아 클래스를 제거한 뒤에
+  oldPane2를 지운다. 사진 확대가 아닌 일반 pane2 교체(앰프→다른 앰프
+  등)는 이 조건에 안 걸려 기존과 동일하게 동작 — 회귀 없음.
+
+### 정리 — 이번 버그 계열 3건의 공통 원인
+`wireMediaLightbox`(modal.js)가 pane1 사진 클릭 시 그 pane1 안의
+`.modal__media-wrap`에 `--collapsing` 클래스를 걸어두는데, 이 클래스를
+정상적으로 떼어내는 코드는 원래 `closeSplitPane2`(X 버튼으로 사진
+확대를 닫는 "정상" 경로) 단 한 곳에만 있었다. 사진 확대 상태에서
+벗어나는 경로가 실제로는 세 갈래(① X 버튼 → closeSplitPane2, ② 배경
+클릭 → closeSplitView → closeSplitPane2, ③ pane1 안의 다른 항목 클릭
+→ openSplitPane의 교체 로직)였는데 ②는 pane2쪽 복원 누락(6-1),
+③은 pane1쪽 collapsing 해제 누락(6-3)이 있었고, 복원되는 pane2 자체도
+collapsing 잔존 문제(6-2)가 있었다 — 세 경로 모두 각자 다른 코드
+지점이라 한 번에 발견되지 않고 순차적으로 드러났다.
+
+### 검증
+`node --check js/ui/split-view.js` 통과. 실제 브라우저 재검증 필요.
+
+---
+
+## v1.7 (2026-07-14) — 세션 5-2 (Delay Defaults 극성 오류 정정 — pdfplumber 텍스트 추출 누락)
+
+### 증상
+사용자 지적: Delay Defaults 표(K1)에서 KS28/CS1/[K1SB_100_NC] 극성이
+전부 "+"로 기재됐는데, 원문 p.37/38/40/42 표에는 K1은 회색 [+] 배지,
+K1-SB/KS28/CS1은 조합에 따라 빨간 [-] 배지가 아이콘으로 박혀 있어
+실제로는 다르다는 리포트.
+
+### 원인
+pdfplumber 텍스트 추출은 PDF 안의 배지형 아이콘(사각형 배경+기호)을
+텍스트 레이어로 인식하지 못해 극성 정보 자체가 통째로 누락됐다 — 이전
+세션에서 이 누락을 놓치고 "값 옆에 극성 언급이 없으니 전부 +"로
+잘못 일반화해 기재함.
+
+### 검증 방법
+PyMuPDF(`fitz`)로 p.37/38/40/42를 300dpi(zoom matrix 3x)로 페이지
+이미지 렌더링 후 Read 툴로 직접 시각 확인. 결과:
+- p.37(K1+KS28 X, K1+K1SB_60): K1 회색[+], K1-SB 회색[+] — 둘 다 정상.
+- p.38([K1SB_100_NC]): K1 회색[+], K1-SB 빨간[-] — K1-SB만 반전.
+- p.40(K1+KS28 전 조합): K1 회색[+], KS28 빨간[-] — KS28은 항상 반전.
+- p.42(K1+CS1 전 조합): K1 회색[+], CS1 빨간[-] — CS1도 항상 반전.
+
+### 수정 (1차)
+- `js/domains/speakers/data/la/k-series.data.js` `presets.delayDefaults.
+  rows[].values`: 극성 정상(+)은 표시를 생략(기본값이라 당연하므로)하고
+  반전인 경우만 "(−)" 접미사 추가. `notes`의 극성 설명 문구도 정정.
+- `js/domains/speakers/speakers.view.js` presetGuideHTML: `values`
+  렌더링에 `highlightPolarityFlip()` 추가 — wrapBreakable 처리 후
+  "−" 문자만(괄호는 일반색 유지, 사용자 요청) `.polarity-flip` span으로
+  감싸 빨간 글씨로 강조. 표 헤더도 "Pre-alignment delay (polarity +)"
+  → "Pre-alignment delay & Polarity"로 수정(더 이상 전부 +가 아니므로).
+- `css/components/spec-table.css`: `.polarity-flip { color: var(--danger,
+  #e5484d); font-weight: 700; }` 신규(--danger 토큰이 프로젝트에 없어
+  폴백 값 직접 지정).
+- `raw-data/raw-specs/la/references/presets/k-series/k1.md`: 구성별
+  상세 섹션(3~6번, K1-SB 서브/NC/KS28/CS1) 딜레이 표에 극성 값 추가·
+  정정, 출처 각주에 "PyMuPDF 이미지 렌더링으로 재확인" 명시.
+
+### 수정 (2차 — 같은 세션 내 사용자 추가 요청)
+- 값 구분자를 텍스트 문자 "·"/"|" 대신 실제 표 구분선으로 바꿔달라는
+  요청 — `k-series.data.js` `delayDefaults.rows[].values`(문자열) →
+  `rows[].items`(문자열 배열, K1/K1-SB/KS28 등 엘리먼트별 값 하나씩)로
+  구조 변경. `speakers.view.js` presetGuideHTML이 각 item을
+  `<span class="delay-item">`으로 감싸 나열하고, `spec-table.css`
+  `.delay-item + .delay-item { border-left: 1px solid var(--line-2) }`
+  로 표 위아래 가로선과는 끊긴 짧은 세로 구분선을 그린다(`.match-table__
+  cell--delay-items { display:flex; flex-wrap:wrap }`로 셀 레이아웃 구성).
+- notes 첫 항목 문구가 "딜레이 + 극성 기본값"이라고 적혀 있어 "극성은
+  항상 +"로 오독될 수 있다는 지적 — "딜레이와 극성 기본값을 함께
+  표기한 것"으로 중립적으로 수정하고, +/− 여부 판단은 이미 있던 두
+  번째 note 항목(반전 규칙 설명)에 전적으로 맡기도록 정리.
+
+### 검증
+`node --check` 문법 확인 통과. 실제 화면(브라우저) 렌더링 확인은
+Task #6(FHD 사진 잘림)과 함께 다음 세션에서 필요.
+
+## v1.7 (2026-07-14) — 세션 5 (FHD 100% 줌 Array 사진 하단 클리핑 버그 — 검증 대기)
+
+### 증상
+사용자 리포트: FHD 해상도 + Chrome 전체화면 + 브라우저 줌 100%에서만
+(90% 이하로 낮추면 재현 안 됨) 세로로 긴 Array 이미지(예:
+`spk-la-k1-array2.webp`, 342×888px, 종횡비 0.39)를 Split View 확대
+pane(`js/ui/split-view.js openMediaSplitPane`)에서 볼 때 사진 하단만
+잘림(상단은 정상). QHD에서는 재현 안 됨.
+
+### 원인 분석 (스크린샷 없이 코드 정적 분석만으로 진행 — 확답 아님)
+`.media-split-pane__body`(modal.css)는 `display: grid; place-items:
+center; flex: 1; height: auto`이고 부모 `.split-view__pane--media`에는
+`overflow-y: hidden`이 걸려 스크롤 폴백이 없다. grid item인
+`.media-split-pane__img`의 암묵적 `min-height`가 기본값 `auto`(=콘텐츠
+고유 크기)라, 세로로 긴 원본 이미지가 grid 트랙 계산에서 `max-height:
+100%`보다 먼저 자기 고유 크기로 반영되려는 순환 참조가 생긴다.
+브라우저 줌 배율에 따른 서브픽셀 반올림이 100% 근방에서만 이 계산을
+살짝 어긋나게 만들어 셀이 미세하게 넘치고, 넘친 만큼이 부모의
+`overflow-y: hidden`에 걸려 잘린 것으로 추정(중앙 정렬 특성상 위보다
+아래가 더 잘려 보임 — 사용자 확인: 실제로 위는 안 잘리고 아래만 잘림).
+
+### 수정
+- `css/components/modal.css` `.media-split-pane__body`: `overflow:
+  hidden` 추가(경계 밖 클리핑을 명시적으로 보장, 정상 케이스는 영향 없음).
+- `css/components/modal.css` `.media-split-pane__img`: `min-height: 0`
+  추가(grid item의 암묵적 auto min-size를 해제해 근본 원인 차단).
+
+### 검증 (같은 세션 내 사용자 확인)
+사용자가 실제 FHD 화면 + Chrome 100% 줌에서 확인 — 더 이상 잘리지
+않음을 확인. 다만 이미지가 박스 경계에 거의 딱 맞게 꽉 차 아래쪽 여백이
+"아주아주아주 미세하게"도 안 보인다는 후속 피드백을 받아 추가 조정:
+- `.media-split-pane__img` / `.modal__media img.media-split-pane__img`
+  의 `max-height: 100%` → `98%`로 변경 — object-fit: contain 특성상
+  세로가 긴 이미지는 세로 기준으로 박스에 꽉 차는데, 100%가 아닌
+  98%로 살짝 줄여 항상 최소한의 여백이 남게 했다(육안상 사진이 작아
+  보이지는 않는 수준).
+Task #6 완료 처리.
+
+## v1.7 (2026-07-14) — 세션 4 (K1_OM_EN.pdf 반영: Preset Guide ratio/minLine/delayDefaults)
+
+### 원문 데이터 정리
+`uploads/K1_OM_EN.pdf`(K1 owner's manual EN version 4.0, 160p) 중 목차
+(Contents p.3-5), Preset description(p.16), Loudspeaker configurations
+(p.34-45)를 pdfplumber로 텍스트 추출해 확인.
+`raw-data/raw-specs/la/references/presets/k-series/k1.md`를 전면 갱신:
+OM 목차 요약표, 구성별(K1 단독/K1-SB LF확장·서브/KS28/CS1/Kara II
+다운필/K2 다운필) 상세 섹션(매칭 비율·최소 라인 길이·pre-alignment
+딜레이·geometric 딜레이), p.16 출력 라우팅 재검증 표를 기존
+preset_guide_EN.pdf 기반 내용에 추가(교차검증, 값 상충 없음).
+
+### 앱 데이터 반영
+- `js/domains/speakers/data/la/k-series.data.js`: K1 `presets.rows`에
+  `ratio`(권장 매칭 비율)·`minLine`(최소 라인 길이) 필드 추가(값이 있는
+  행만), Kara II/K2 다운필 구성 2행 신규 추가. `presets.delayDefaults`
+  객체 신규(rows: 프리셋 조합별 pre-alignment 딜레이, notes: geometric
+  딜레이·동일 라인소스 내 딜레이 미적용 규칙, source). `presets.source`에
+  K1_OM_EN.pdf 출처 병기.
+- `js/domains/speakers/speakers.view.js` `presetGuideHTML()`: config 셀에
+  ratio/minLine 값이 있으면 `.preset-guide__ratio` 보조 줄로 표시(없는
+  행은 기존과 동일). `delayDefaults`가 있으면 Preset Guide 하위에
+  "Delay Defaults" 토글 섹션(표 2열 + notes + source)을 추가 렌더 —
+  `data-section-toggle` 패턴 재사용, wireSectionToggle 자동 배선이라 JS
+  추가 배선 불필요.
+- `css/components/spec-table.css`: `.match-table--preset-guide-delay`
+  (2열 grid, Preset Guide 표와 동일한 셀 스타일) 신규,
+  `.preset-guide__ratio`(작은 흐린 색 보조 텍스트) 신규.
+
+### 검증
+`node --check`로 `k-series.data.js`/`speakers.view.js` 문법 오류 없음 확인.
+
 ## v1.7 (2026-07-13) — 세션 3 (K-series/L-series 실사 이미지 대량 추가, connectors 필드 수정)
 
 ### 이미지 아카이빙 + 최적화 반영

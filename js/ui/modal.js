@@ -40,8 +40,25 @@ export function isMobileLayout() {
 export function initModal(bgId = "modalbg", modalId = "modal") {
   modalBgEl = document.getElementById(bgId);
   modalEl = document.getElementById(modalId);
-  modalBgEl.addEventListener("click", e => { if (e.target === modalBgEl) closeModal(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+  // [사용자 요청] Split View 가 열려있을 땐 배경 클릭 한 번에 전체가 닫히지
+  // 않고, 오른쪽 pane2 부터 먼저 닫힌 뒤 그 다음 클릭에 왼쪽 단일 모달이
+  // 닫힌다 — splitViewCloser 가 pane2 를 닫았으면(true) 거기서 멈추고,
+  // 닫을 pane2 가 없었으면(false, 스플릿뷰가 아예 없거나 이미 pane1만
+  // 남은 상태) 기존처럼 모달 전체를 닫는다.
+  modalBgEl.addEventListener("click", e => {
+    if (e.target !== modalBgEl) return;
+    if (splitViewCloser && splitViewCloser()) return;
+    closeModal();
+  });
+  // [사용자 요청] 라이트박스(wireMediaLightbox)가 떠 있을 때 ESC 를 누르면
+  // 라이트박스만 닫히고 뒤의 상세 모달까지 함께 닫히지 않아야 한다 —
+  // 라이트박스가 있으면 그것만 제거하고 return, 없을 때만 기존처럼 모달을 닫는다.
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    const lightbox = document.querySelector(".media-lightbox");
+    if (lightbox) { lightbox.remove(); return; }
+    closeModal();
+  });
   return { modalBgEl, modalEl };
 }
 
@@ -164,7 +181,8 @@ export function wirePaneInteractions(root) {
   wireViewSwitch(root);
   wireDimsUnitSwitch(root);
   wireWeightUnitSwitch(root);
-  wireMediaZoom(root);
+  // [사용자 요청] 커서 추적 hover-zoom 기능 전반 off.
+  wireMediaLightbox(root);
   wireConfigsToggle(root);
   wireSectionToggle(root);
   wireScrollbarAutoShow(root);
@@ -243,6 +261,12 @@ const SCROLLBAR_MIN_THUMB = 24;
 const SCROLLBAR_MAX_THUMB = 160;
 
 function wireScrollbarAutoShow(root) {
+  // [사용자 요청] 사진 확대 pane(split-view.css .split-view__pane--media,
+  // overflow-y: hidden)은 스크롤 자체가 없어야 하는 pane 이다 — 그런데
+  // overflow:hidden 이어도 콘텐츠가 박스보다 크면 scrollHeight 는 여전히
+  // 커지므로, 아래 update() 의 "scrollable > 0 이면 트랙 표시" 판정에 걸려
+  // 커스텀 스크롤바만 계속 나타났다. 이 pane 은 아예 배선을 건너뛴다.
+  if (root.closest && root.closest(".split-view__pane--media")) return;
   // [DOM 준비] 트랙은 document.body 에 직접 붙인다 — .modal(스크롤 컨테이너)
   // 의 자식으로 두면 position:fixed 라도 여전히 스크롤 오프셋 계산에
   // 얽혀(브라우저에 따라 scrollHeight 를 부풀리는 경우가 있었다) 스크롤이
@@ -406,6 +430,114 @@ function wireMediaZoom(root) {
   });
 }
 
+// [사용자 요청] 사진 클릭 시 Split View 오른쪽 pane 자리에 확대본을 연다.
+// modal.js 는 split-view.js 의 openSplitPane 을 직접 import 하면 순환
+// import(split-view.js 가 이미 modal.js 를 import)가 생기므로, 대신 이
+// 콜백 슬롯을 두고 split-view.js 가 자기 초기화 시점에 실제 함수를 등록한다
+// (아래 setMediaLightboxOpener). 등록 전(초기화 순서 문제 등)에는 안전하게
+// 아무 일도 하지 않는다.
+let mediaLightboxOpener = null;
+
+/**
+ * split-view.js 가 앱 초기화 시 1회 호출해 실제 "사진 확대 pane 열기" 구현을
+ * 등록한다.
+ * @param {(views: {src: string, alt: string, label: string}[], startIndex: number, paneColor: string, onViewChange: (index: number) => void) => void} opener
+ */
+export function setMediaLightboxOpener(opener) {
+  mediaLightboxOpener = opener;
+}
+
+// [사용자 요청] 배경(모달 바깥) 클릭 시 — Split View 가 열려있으면 오른쪽
+// pane2 만 먼저 닫고, pane2 가 없으면(또는 이미 닫힌 뒤 한 번 더 클릭하면)
+// 그제서야 모달 전체를 닫는다. split-view.js 의 closeSplitView 를 같은
+// 콜백 슬롯 패턴(위 mediaLightboxOpener 참고)으로 등록받는다 — modal.js 가
+// split-view.js 를 직접 import 하면 순환 import 가 생기기 때문이다.
+let splitViewCloser = null;
+
+/**
+ * split-view.js 가 앱 초기화 시 1회 호출해 "Split View pane2만 닫기" 구현을
+ * 등록한다.
+ * @param {() => boolean} closer pane2 가 있어서 닫았으면 true, 없어서 아무
+ *   일도 하지 않았으면 false 를 반환해야 한다.
+ */
+export function setSplitViewCloser(closer) {
+  splitViewCloser = closer;
+}
+
+/**
+ * 모달 이미지를 클릭하면 Split View 오른쪽 pane 자리에 원본 확대본을 연다
+ * (실제 오픈 로직은 split-view.js, 위 setMediaLightboxOpener 참고).
+ * [사용자 요청] hover-zoom(wireMediaZoom, 위)은 그대로 두고 별도 기능으로
+ * 추가 — 나중에 어느 한쪽만 개별로 켜고 끌 수 있도록, 이 함수는
+ * .modal__media 에 data-lightbox="off" 가 있으면 아무 일도 하지 않고
+ * 조용히 빠진다(현재는 모든 모달에서 기본 on, 필요해지면 각 도메인의 view가
+ * 이 속성만 추가하면 됨).
+ * [사용자 요청 — 확대 pane 안에서도 뷰 전환] 클릭 시점의 이미지 하나만
+ * 넘기던 것을, .modal__media 안의 모든 [data-view] img 를 순서대로 모아
+ * views 배열로 넘기도록 바꿨다 — split-view.js 가 이 배열로 확대 pane
+ * 하단에도 원본 모달과 같은 뷰 전환 버튼을 그릴 수 있다. 클릭 시점에
+ * hidden 이 아니던 이미지의 인덱스를 startIndex 로 함께 넘겨, 확대pane도
+ * 클릭 당시 보고 있던 뷰로 시작한다.
+ * @param {HTMLElement} root 모달 전체 컨테이너
+ */
+function wireMediaLightbox(root) {
+  const media = root.querySelector(".modal__media");
+  if (!media || media.dataset.lightbox === "off") return;
+  // [버그 수정 — 리스너 중복] wirePaneInteractions 는 같은 모달/pane 을 열
+  // 때마다(카드를 다시 클릭할 때마다) 반복 호출되는데, addEventListener 를
+  // 쓰면 같은 .modal__media 노드에 클릭 리스너가 계속 누적됐다 — 그 결과
+  // 클릭 한 번에 wrap.classList.add 와 mediaLightboxOpener 호출이 여러 번
+  // 실행돼, 왼쪽 사진 접힘 트랜지션이 몇 번 열고 닫아야만 눈에 보이고,
+  // 확대 pane 의 onClose 콜백도 중복 등록되어 X 를 두 번 눌러야 완전히
+  // 닫히는 버그로 이어졌다. 다른 wire* 함수들처럼 onclick 할당(매번
+  // 덮어써짐)으로 통일한다.
+  media.onclick = () => {
+    const imgs = [...media.querySelectorAll("img[data-view]")];
+    const list = imgs.length ? imgs : [...media.querySelectorAll("img")];
+    if (!list.length || !mediaLightboxOpener) return;
+    const startIndex = Math.max(0, list.findIndex(img => !img.hidden));
+    const views = list.map(img => ({ src: img.src, alt: img.alt, label: img.dataset.viewLabel || img.dataset.view || "", slug: img.dataset.view || "" }));
+    // [사용자 요청] 오른쪽 확대 pane 상단 강조선도 왼쪽(원본) pane 과 같은
+    // 제조사 포인트 색을 쓴다 — root(pane1 또는 modalEl)에 이미 걸려있는
+    // --mfr CSS 변수를 그대로 읽어 넘긴다.
+    const paneColor = getComputedStyle(root).getPropertyValue("--mfr").trim();
+    // [사용자 요청] 오른쪽에 확대 pane 이 열리는 동안, 왼쪽(원본) 모달의
+    // 사진 영역은 위로 슬라이드되며 서서히 사라진다 — 높이와 불투명도를
+    // 함께 줄여(modal.css .modal__media-wrap--collapsing) 사진이 접히듯
+    // 사라지고 아래 콘텐츠(System Elements 등)가 그만큼 바로 올라온다.
+    const wrap = media.closest(".modal__media-wrap");
+    // [사용자 요청] 확대 pane 에서 뷰를 바꾼 뒤 닫으면, 왼쪽(원본) 모달도
+    // 그 바뀐 뷰 그대로 돌아온다 — 확대 pane 이 닫히는 시점에 그 뷰의 slug
+    // 를 넘겨받아, slug 가 같은 원본 모달의 뷰 전환 버튼을 그대로
+    // 클릭시켜 wireViewSwitch(위) 의 기존 토글 로직을 재사용한다. 인덱스가
+    // 아니라 slug 로 매칭하는 이유: 스택 그룹(K2 등)이 있는 카드는 버튼의
+    // DOM 순서가 views 배열 순서와 달라(스택 칸이 먼저 렌더링) 인덱스만
+    // 으로는 엉뚱한 버튼을 클릭할 수 있다.
+    const onViewChange = slug => {
+      const btn = [...root.querySelectorAll("[data-view-switch]")].find(b => b.dataset.viewSwitch === slug);
+      if (btn) btn.click();
+    };
+    // [사용자 요청] 오른쪽 확대 pane 오픈과 왼쪽 사진 영역 접힘이 동시에
+    // 시작돼야 한다 — 그래서 pane 오픈(mediaLightboxOpener, 모달 자식을
+    // pane1 로 옮기는 DOM 재구성 포함)을 먼저 즉시 실행하고, wrap 이 그
+    // 새 부모(pane1) 안에 자리를 잡은 바로 다음에 --collapsing 클래스를
+    // 붙여 트랜지션을 재생한다.
+    // [이전 버그] 반대 순서(클래스 먼저 → 그 다음 DOM 이동)로 하면, 같은
+    // 동기 흐름 안에서 "접히기 전" 상태를 화면에 한 번도 그리지 못한 채
+    // 두 변경이 합쳐져 트랜지션 없이 곧장 최종(접힌) 모습으로 렌더링됐다.
+    // 지금 순서는 이동을 먼저 끝내(요소는 여전히 문서 안에 남아있고 부모만
+    // 바뀌므로 트랜지션 자체에는 영향 없음) 그 상태를 한 프레임 그리게 한
+    // 뒤 클래스를 추가하므로, "펼쳐진 상태"가 먼저 확실히 페인트되고
+    // 그 다음 "접힌 상태"로의 전환이 트랜지션으로 재생된다.
+    mediaLightboxOpener(views, startIndex, paneColor, onViewChange);
+    if (wrap) {
+      requestAnimationFrame(() => {
+        wrap.classList.add("modal__media-wrap--collapsing");
+      });
+    }
+  };
+}
+
 /**
  * Configurations 표(스피커 기준, configsBySpeakerTableHTML)의 +N 토글
  * 버튼을 연결한다 — 클릭 시 같은 data-toggle-group 을 가진 하위 행(--sub)
@@ -440,14 +572,26 @@ function wireConfigsToggle(root) {
  * @param {HTMLElement} root 배선 대상 컨테이너
  */
 function wireSectionToggle(root) {
-  root.querySelectorAll("[data-section-toggle]").forEach(btn => {
-    const key = btn.dataset.sectionToggle;
-    const bodyEl = root.querySelector(`[data-section-toggle-body="${key}"]`);
-    if (!bodyEl) return;
-    btn.onclick = () => {
-      const expanded = btn.getAttribute("aria-expanded") === "true";
-      btn.setAttribute("aria-expanded", String(!expanded));
-      bodyEl.hidden = expanded;
+  // [사용자 요청] 아무 토글 버튼이든 Ctrl/Cmd 를 누른 채 클릭하면, 그
+  // 버튼 하나만 토글하는 대신 같은 모달(root) 안의 모든 섹션 토글을 한
+  // 번에 펼치거나 접는다 — 클릭한 버튼이 지금 펼쳐진 상태였으면 전체
+  // 접기, 접힌 상태였으면 전체 펼치기(그 버튼 자신의 다음 상태를 기준으로
+  // 나머지를 맞춘다).
+  const pairs = [...root.querySelectorAll("[data-section-toggle]")]
+    .map(btn => ({ btn, bodyEl: root.querySelector(`[data-section-toggle-body="${btn.dataset.sectionToggle}"]`) }))
+    .filter(p => p.bodyEl);
+  pairs.forEach(({ btn, bodyEl }) => {
+    btn.onclick = e => {
+      const expandNext = btn.getAttribute("aria-expanded") !== "true";
+      if (e.ctrlKey || e.metaKey) {
+        pairs.forEach(p => {
+          p.btn.setAttribute("aria-expanded", String(expandNext));
+          p.bodyEl.hidden = !expandNext;
+        });
+        return;
+      }
+      btn.setAttribute("aria-expanded", String(expandNext));
+      bodyEl.hidden = !expandNext;
     };
   });
 }

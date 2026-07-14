@@ -71,3 +71,9 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* [사용자 요청] 라이트/다크 모드·사진 숨기기와 같은 패턴의 수동 전역
+   토글(js/ui/motion-toggle.js) — 시스템 설정과 무관하게 사용자가 직접
+   사이트 전반의 애니메이션/트랜지션을 끌 수 있다. 위 prefers-reduced-motion
+   과 동일한 처리를 body 클래스로도 트리거한다. */
+body.reduce-motion * { animation: none !important; transition: none !important; }

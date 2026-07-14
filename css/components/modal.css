@@ -205,6 +205,10 @@
    .modal__head 의 24px padding 기준선(= 아래 spec-table/match-table 의
    실제 우측 끝과 동일한 세로선)까지 그대로 뻗을 수 있다. */
 .modal__head .eyebrow { margin-bottom: 7px; padding-right: 28px; }
+/* [사용자 요청] 사진 확대 pane(js/ui/split-view.js openMediaSplitPane)은
+   제목/사양 없이 닫기 버튼만 있는 빈 헤더라, 기본 border-bottom 구분선이
+   붕 떠 있는 가로줄처럼 어색해 보였다 — 이 전용 헤더에서만 없앤다. */
+.modal__head--media-only { border-bottom: none; padding-bottom: 0; }
 .modal__title {
   font-size: 28px;
   font-weight: 800;
@@ -305,6 +309,81 @@
   display: grid;
   place-items: center;
 }
+/* [사용자 요청] 사진 클릭 → Split View 오른쪽 pane 자리에 확대본을 연다
+   (hover-zoom 은 그대로 유지, 별개 기능 — js/ui/split-view.js
+   openMediaSplitPane, js/ui/modal.js wireMediaLightbox 참고). pane 자체의
+   카드 배경/테두리는 split-view.css .split-view__pane 을 그대로 쓰고,
+   여기서는 그 안의 빈 바디에 사진만 꽉 채워 보여준다. */
+/* [뷰 전환 버튼 추가] 확대 pane 이 여러 장(뷰)을 가질 때 사진 아래에
+   원본 모달과 동일한 .modal__view-switch 를 붙이기 위해, 사진 영역과
+   토글 바를 세로로 쌓는 래퍼가 필요해졌다. 사진 영역은 남는 높이를 모두
+   차지(flex: 1)하고 토글 바는 자기 높이만큼만 차지한다. */
+.media-split-pane__body-wrap {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.media-split-pane__body {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  display: grid;
+  place-items: center;
+  /* [버그 수정 — FHD 등 뷰포트가 낮은 화면에서 세로로 긴 Array 사진
+     아래쪽이 잘리던 문제] grid item(이미지)의 max-height: 100% 는 이
+     컨테이너가 명시적인(퍼센트가 아닌) 높이를 가져야 정상 작동한다.
+     이 요소는 flex: 1 + height: auto 라 실제 높이가 부모(pane)의 남은
+     공간으로 계산되는데, grid item 이 place-items: center 로 콘텐츠
+     크기를 먼저 재려 하면서 브라우저 줌 배율(100% 근방)의 서브픽셀
+     반올림에 따라 이미지 실제 렌더 높이가 이 박스보다 커지는 경우가
+     있었다 — 부모 .split-view__pane--media 에는 overflow-y: hidden 이
+     걸려 있어 그 초과분이 위쪽은 안 잘리고 아래쪽만 잘려 보였다(중앙
+     정렬 기준으로 아래가 더 많이 넘침). overflow: hidden 을 여기 직접
+     추가해 이 박스 경계를 넘는 순간 확실히 클리핑 대상이 되게 해
+     레이아웃 계산과 무관하게 항상 박스 안에서만 그려지도록 한다(사진이
+     이미 max-height: 100%로 축소되므로 정상 케이스에서는 아무 변화 없음). */
+  overflow: hidden;
+  /* [뷰 전환 버튼 추가] 하단 .modal__view-switch(position:absolute) 의
+     기준 부모가 되어야 하므로 relative 필요 — 단, .modal__media-wrap 의
+     그라디언트 배경/구분선은 확대 pane 에 어울리지 않아 가져오지 않는다. */
+  position: relative;
+}
+/* [버그 수정] .modal__view-switch 는 마크업상 .media-split-pane__body 의
+   자손이 아니라 형제(.media-split-pane__body-wrap 안에 나란히 위치)라
+   ":hover 자손" 선택자로는 걸리지 않아 버튼에 마우스를 올려도 opacity 가
+   돌아오지 않았다 — 래퍼(body-wrap) 전체에 :hover 를 걸어 사진 영역이든
+   토글 바 자신이든 마우스가 그 안에 있으면 항상 또렷해지게 한다. */
+.media-split-pane__body-wrap:hover .modal__view-switch { opacity: 1; }
+.media-split-pane__img {
+  max-width: 100%;
+  /* [사용자 요청 — FHD 100% 줌에서 사진 잘림 수정 후 후속 조정] 잘림은
+     해결됐지만 세로로 긴 이미지(Array 등)가 정확히 박스 높이까지 꽉
+     차면서 위아래 여백이 거의 안 보였다 — max-height 를 100%가 아닌
+     98%로 살짝 줄여 항상 미세한 여백이 남도록 한다(2%면 육안으로는
+     "약간의 숨 쉴 틈" 정도로만 보이고 사진이 작아 보이지는 않음). */
+  max-height: 98%;
+  /* [버그 수정 — 근본 원인] grid item 의 암묵적 min-height 는 기본값이
+     auto(=콘텐츠 자체 크기)라, 세로로 긴 원본 이미지(Array 사진 등)가
+     "먼저" 그 크기로 grid 셀을 넓히려 들고 나서야 max-height: 100%가
+     계산돼 순환 참조가 생긴다 — 브라우저 줌 배율에 따라 이 계산이
+     흔들려 100% 근방에서만 셀이 미세하게 넘치고 위 overflow: hidden에
+     걸려 잘렸다. min-height: 0(그리드 자동 최소 크기 해제)을 명시하면
+     셀이 콘텐츠 크기를 따라가지 않고 부모가 정한 크기 안에서만 이미지가
+     계산되어 근본적으로 넘치지 않는다. */
+  min-height: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, .6));
+}
+/* [특이도 수정] 이미지가 .modal__img(뷰 전환 배선용)를 겸하면서
+   .modal__media img(158px/74% 고정, 아래 선언)에 특이도로 밀려 확대
+   pane 안에서도 원본 모달 박스 크기로 눌려 보였다 — 여기서 다시
+   태그+클래스 조합으로 덮어써 확대 pane 에서는 98%까지 커지게 한다
+   (100%가 아닌 98%인 이유는 위 .media-split-pane__img 선언과 동일 —
+   FHD 100% 줌에서도 사진 아래 미세한 여백이 남도록). */
+.modal__media img.media-split-pane__img {
+  max-width: 100%;
+  max-height: 98%;
+}
 /* 변경자: 사진 자체가 없는 항목(액세서리 등)의 자리표시 아이콘 — 카드의
    .card__noimg(card.css) 와 같은 톤, 모달 미디어 박스 높이(190px)에 맞춰
    중앙에 큼직하게 표시한다. */
@@ -334,10 +413,8 @@
    그림자만 그 위에 도드라져 사진 영역과 토글 바 사이에 별도 구분선이
    생긴 것처럼 보인다. 확대 배율(1.4)만큼 그림자 값을 나눠 보정해 배율과
    무관하게 항상 같은 굵기로 보이게 한다(12/1.4≈8.5, 26/1.4≈18.5). */
-.modal__media img:hover {
-  transform: scale(1.4);
-  filter: drop-shadow(0 8.5px 18.5px rgba(0, 0, 0, .6));
-}
+/* [사용자 요청] 커서 추적 hover-zoom 기능 전반 off — 배율만 끄고
+   드롭섀도우는 평상시 값을 유지(hover 시에도 동일하게). */
 /* 변경자: card__img--wide 와 동일한 이유(실물 비율이 극단적으로 가로로
    긴 1U 랩마운트 앰프 등).
    [진짜 원인] .modal__media img { max-width: 74% } 가 태그+클래스(0,0,2)라
@@ -354,10 +431,7 @@
    그림자도 배율(2.8)만큼 나눠 보정(12/2.8≈4.3, 26/2.8≈9.3) — 위 일반
    :hover 규칙보다 더 구체적인 선택자(.modal__img--wide 포함)라 이 규칙이
    덮어쓴다. */
-.modal__media img.modal__img--wide:hover {
-  transform: scale(2.8);
-  filter: drop-shadow(0 4.3px 9.3px rgba(0, 0, 0, .6));
-}
+/* [사용자 요청] 커서 추적 hover-zoom 기능 전반 off. */
 /* [K2 Panflex Detail] 힌지 클로즈업 사진은 우하단 쪽이 넓게 투명 처리되어
    있어 object-fit:contain 기본 중앙 정렬로는 실제 내용(좌상단)이 프레임
    중앙에서 비어 보인다 — 이 뷰만 좌측 상단 기준으로 정렬한다. */
@@ -385,7 +459,37 @@
      .modal__view-switch 의 z-index 로 항상 이미지 위에 떠서 가려지지
      않고 클릭 가능하다. */
   overflow: hidden;
+  /* [사용자 요청] 사진 클릭 → 오른쪽에 확대 pane 이 열리는 동안 이 높이도
+     함께 트랜지션되어 접히듯 사라진다(아래 --collapsing 변경자 참고).
+     max-height 트랜지션은 시작값이 auto 면 동작하지 않으므로, 사진
+     영역(190px)+토글 바가 절대 넘지 않을 넉넉한 고정값을 기본으로 둔다. */
+  max-height: 260px;
+  /* [사용자 요청] 접히는 속도가 너무 빨라 보여 늦췄다(펼쳐질 때/복원 시는
+     기존 속도 유지 — 아래 --collapsing 규칙에서 접힐 때만 duration을
+     따로 늘린다). */
+  transition: max-height .28s ease, opacity .22s ease;
 }
+/* [사용자 요청] 오른쪽에 사진 확대 pane 이 열릴 때, 왼쪽(원본) 모달의 사진
+   영역은 위로 슬라이드되며 사라진다 — max-height 를 0으로 줄이고
+   opacity 도 함께 낮춰 "접히며 사라지는" 느낌을 준다. overflow:hidden 이
+   이미 걸려있어 별도 클리핑 처리 없이도 내용이 그 높이만큼만 보인다.
+   modal.js wireMediaLightbox 가 클릭 시 이 클래스를 추가하고,
+   split-view.js closeSplitPane2 가 확대 pane 이 닫힐 때 제거한다.
+   [사용자 요청 — 속도 조정] 오른쪽 확대 pane 오픈이 이 트랜지션 종료를
+   기다렸다가 진행되므로(modal.js wireMediaLightbox), 너무 느리면 확대
+   pane 이 뜨는 체감 속도까지 함께 느려진다 — .28s(기본) 대비 살짝만
+   느리게. */
+.modal__media-wrap--collapsing {
+  max-height: 0;
+  opacity: 0;
+  border-bottom-color: transparent;
+  transition: max-height .35s ease, opacity .3s ease;
+}
+/* [사용자 요청] 토글 바(.modal__view-switch)는 평소 옅게(opacity .35)
+   깔려 있다가, 사진 영역에 마우스를 올렸을 때만 또렷해져(opacity 1)
+   버튼을 누르기 쉬워진다 — 평상시엔 사진을 최대한 가리지 않으면서도
+   지금 활성 뷰가 무엇인지는 흐릿하게나마 계속 보여준다. */
+.modal__media-wrap:hover .modal__view-switch { opacity: 1; }
 /* [사용자 요청 — 최종 해결] whitebg 뷰가 보이는 동안엔 배경을 그냥
    흰색으로 고정한다 — card.css 와 동일하게, whitebg 이미지 파일 자체를
    이미 흰 배경으로 좌우 확장해서 저장해뒀으므로(원본 raw 는 그대로,
@@ -437,13 +541,59 @@
 }
 
 .modal__view-switch {
-  position: relative;
+  /* [사용자 요청] 뷰가 많은 스피커(K2 등)는 토글 줄이 3줄까지 늘어나
+     .modal__media-wrap 전체 높이가 커져, 사진 영역 높이가 앰프 모달
+     (토글 없음, 항상 190px 고정)과 서로 달라 보였다 — 토글 바를
+     position: absolute 로 사진 위에 겹쳐서 얹어 wrap 자체의 레이아웃
+     높이에 더 이상 영향을 주지 않게 한다.
+     [사용자 요청 — 2차] 그런데 3줄짜리 토글바가 항상 떠 있으니 사진 하단
+     절반 가까이 가려 보였다 — 평소엔 옅게(opacity) 깔아둬서 지금 활성
+     뷰가 뭔지는 알 수 있게 하되, .modal__media-wrap 에 마우스를 올렸을
+     때만 또렷하게 보이도록(hover, 아래 :hover 규칙 참고) 바꿔 평상시
+     사진 가림을 최소화한다. */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 1; /* 확대된 이미지 위에 항상 떠서 버튼이 가려지지 않게 */
   display: flex;
   justify-content: center;
+  opacity: .12;
+  transition: opacity .15s ease;
+  /* [사용자 요청] 스택 칸(Horizontal/Vertical/...)의 줄 수가 모델마다
+     2개(K1)/3개(K2, Kara IIi) 등으로 달라 옆(가로로 나열된) 버튼과의
+     높이를 고정 px 값으로는 맞출 수 없었다 — align-items: stretch 로
+     바꿔 flex 컨테이너가 가장 높은 아이템(보통 스택 칸)에 자동으로
+     맞추고, 옆 버튼은 아래 height:100% 로 그 늘어난 높이를 그대로
+     채우게 한다. 스택이 몇 개든 항상 자동으로 정확히 일치. */
+  align-items: stretch;
   gap: 2px;
   padding: 0 8px 10px;
 }
+/* [사용자 요청 — Kara IIi 등 뷰 6개까지 늘어난 모델] Horizontal/Vertical/
+   Vertical (Panflex)는 항상 함께 다니는 "앵글" 계열이라 라벨이 짧다 —
+   이 셋만 세로로 쌓아(.modal__view-switch-stack) 한 칸으로 압축하고,
+   부가 설명이 긴 나머지 뷰(Array White/Array Black/With SB18 등)는
+   스택 칸을 제외하고는 항상 한 줄로 가로 나열해야 한다(사용자 확인 —
+   With SB18 이 줄바꿈으로 아래 줄에 혼자 떨어지면 안 됨). flex-wrap 을
+   기본값(nowrap)으로 둬 폭이 좁아져도 줄바꿈 대신 버튼 자체가 줄어들게
+   한다. */
+.modal__view-switch-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+}
+.modal__view-switch-stack .modal__view-btn { padding-top: 2px; padding-bottom: 2px; }
+/* 스택 밖(가로로 나열된) 버튼 — Array White/Black, With SB18 등 본문+
+   서브텍스트 2줄짜리 버튼. [버그 수정] height: 100% 를 줬었는데
+   .modal__view-switch 자체가 명시적 px 높이가 없는(콘텐츠로 결정되는)
+   flex 컨테이너라 퍼센트 높이가 무시되고 버튼이 자기 콘텐츠 높이로만
+   렌더링됐다(active 시 실측 51.75px, 스택 칸은 67px로 서로 어긋남) —
+   height: 100% 를 지우고 align-items: stretch(부모 기본 동작, 명시 불요)
+   에 맡기면 flex item 은 형제 중 가장 큰 높이(보통 스택 칸)로 자동
+   늘어난다. */
+.modal__view-switch > .modal__view-btn { display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; }
 .modal__view-btn {
   appearance: none;
   border: 1px solid transparent; /* [레이아웃 안정성] active 시 border 가 생겨도 크기가 안 흔들리게 기본에도 투명 border 확보 */
@@ -456,8 +606,44 @@
   border-radius: 6px;
   cursor: pointer;
   box-sizing: border-box;
+  /* [사용자 요청] "Array (12x + K2-BUMP + K2-BAR)"처럼 본문+괄호 두 줄로
+     강제 줄바꿈(speakers.view.js viewBtnLabelHTML)되는 라벨이 한 줄짜리
+     라벨(Horizontal 등)과 나란히 있어도 답답하지 않도록 줄 간격을 살짝
+     확보하고 가운데 정렬한다. */
+  line-height: 1.35;
+  text-align: center;
   transition: background .15s, color .15s, border-color .15s;
 }
+/* [사용자 요청] "Vertical (Panflex)"처럼 괄호 안이 한 단어뿐인 라벨은
+   버튼 폭이 좁아도(스택 칸이 Horizontal/Vertical 기준으로 좁게 잡힘)
+   "Vertical"/"(Panflex)"로 갈라지지 않고 항상 한 줄로 남아야 한다
+   (speakers.view.js isNowrapLabel 이 이 클래스를 붙인다). Array White 등
+   괄호 안이 여러 단어인 라벨은 이 클래스가 없어 기존처럼 자연 word-wrap. */
+.modal__view-btn--nowrap { white-space: nowrap; }
+/* [사용자 요청] "Array White (8x + KARAIIi-BUMP)"처럼 부가설명이 붙은
+   라벨은 괄호를 없애고 안의 내용("8x + KARAIIi-BUMP")만 본문("Array
+   White") 아래 별도 줄에 작고 연한 배지 텍스트로 보여준다(괄호가 줄
+   중간·끝에 걸쳐 어색해 보이던 문제 해결, speakers.view.js
+   viewBtnLabelHTML 참고). 본문보다 살짝 작고 흐린 색으로 시각적 위계를
+   준다 — 버튼 자체 폭에 맞춰 자연 word-wrap 되는 건 유지(강제 줄바꿈 없음). */
+.modal__view-btn-sub {
+  /* [버그 수정] display: inline-block 이었을 때 이 span 전체가 하나의
+     통짜 박스로 취급돼 "8x + KARAIIi-BUMP" 전체가 통째로 다음 줄로
+     밀려버렸다("8x +"까지 같이 아래로 내려감) — inline-block 은 내부
+     텍스트가 word-wrap 되더라도 박스 자체는 부모 라인 안에서 하나의
+     단위로만 배치되기 때문. display: block 으로 바꿔 실제로 새 줄에서
+     시작하되, 그 줄 안에서는 일반 텍스트처럼 공백 단위로 자유롭게
+     줄바꿈되게 한다("8x +" / "KARAIIi-BUMP"). */
+  display: block;
+  font-size: 0.9em;
+  font-weight: 500;
+  opacity: 0.75;
+}
+/* [사용자 요청] "KARAIIi-BUMP"처럼 하이픈 있는 모델명 토큰(모델명 등)이
+   버튼 폭이 좁을 때 브라우저 기본 word-wrap 이 하이픈 지점에서 쪼개
+   "KARAIIi-" / "BUMP"로 잘랐다 — 이 토큰만 nowrap 으로 감싸(js
+   wrapHyphenTokens) 항상 통째로 다음 줄로 넘어가게 한다. */
+.modal__view-btn-sub-nowrap { white-space: nowrap; }
 .modal__view-btn:hover { color: var(--ink-2); }
 /* [확대 시 토글도 사진이 비쳐 보이게] active 버튼도 배경을 채우지 않는다 —
    불투명 배경(구 --panel-3)이 있으면 사진이 확대(hover zoom)됐을 때 Array

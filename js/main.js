@@ -20,6 +20,7 @@ import { renderNav } from "./ui/nav.js";
 import { initModal } from "./ui/modal.js";
 import { initTheme } from "./ui/theme.js";
 import { initMediaToggle } from "./ui/media-toggle.js";
+import { initMotionToggle } from "./ui/motion-toggle.js";
 import { initStickyHeader } from "./ui/sticky-header.js";
 import { $ } from "./core/dom.js";
 
@@ -44,13 +45,14 @@ initSoftwareDomain();
 initBrandDomain();
 initTestDomain();
 
-// [사용자 요청] 사진/다크모드 토글 버튼이 이제 topbar 가 아니라 renderNav()
-// 가 그리는 topnav__tools 안에 있으므로, 버튼을 DOM 에서 찾아 연결하는
-// initTheme/initMediaToggle 은 반드시 renderNav 이후에 호출해야 한다
-// (이전 순서대로 두면 #theme-toggle/#media-toggle 이 아직 없어 null).
+// [사용자 요청] 사진/다크모드/모션 토글 버튼이 이제 topbar 가 아니라
+// renderNav() 가 그리는 topnav__tools 안에 있으므로, 버튼을 DOM 에서 찾아
+// 연결하는 initTheme/initMediaToggle/initMotionToggle 은 반드시 renderNav
+// 이후에 호출해야 한다(이전 순서대로 두면 #theme-toggle 등이 아직 없어 null).
 renderNav($("#topnav"));
 initTheme($("#theme-toggle"));
 initMediaToggle($("#media-toggle"));
+initMotionToggle($("#motion-toggle"));
 initRouter("speakers");
 
 // 상단바 부제: 데이터에 포함된 전체 브랜드 목록 — BRANDS 데이터로 구동되므로

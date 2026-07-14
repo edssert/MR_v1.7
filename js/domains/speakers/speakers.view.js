@@ -147,10 +147,17 @@ export function cardHTML(d) {
   // 뷰로 크로스페이드를 적용한다(카드는 좁아 세 번째 이상은 모달에서만 확인).
   // 두 이미지를 겹쳐 쌓고 CSS(:hover)로 opacity 를 전환하므로 JS 상태 없이
   // 동작하며, 뷰가 1개뿐인 모델은 기존과 동일하게 이미지 1장만 렌더링된다.
+  // [사용자 요청 — K1] 모달 안 뷰 순서(Horizontal/Vertical/Array...)는
+  // 그대로 두되, 카드 hover 대상만 개별적으로 다른 뷰를 쓰고 싶은 모델을
+  // 위해 d.cardHoverView(뷰 label 문자열)를 두면 그 label 의 뷰를 hover
+  // 대상으로 쓴다. 없으면 기존과 동일하게 views[1](두 번째 뷰)을 쓴다.
+  // 스피커마다 필요한 hover 규칙이 다를 수 있어 이 필드가 없는 모델은
+  // 영향받지 않는다.
   const views = getViews(d);
+  const hoverView = (d.cardHoverView && views.find(v => v.label === d.cardHoverView)) || views[1];
   const media = views.length
-    ? (views.length > 1
-        ? `<img class="card__img card__img--front" loading="lazy" src="${views[0].src}" alt="${esc(d.name)}"><img class="card__img card__img--back" loading="lazy" src="${views[1].src}" alt="${esc(d.name)} ${esc(views[1].label)}">`
+    ? (views.length > 1 && hoverView
+        ? `<img class="card__img card__img--front" loading="lazy" src="${views[0].src}" alt="${esc(d.name)}"><img class="card__img card__img--back" loading="lazy" src="${hoverView.src}" alt="${esc(d.name)} ${esc(hoverView.label)}">`
         : `<img class="card__img" loading="lazy" src="${views[0].src}" alt="${esc(d.name)}">`)
     : `<div class="card__noimg">◢</div>`;
   // 드라이버 구성: 텍스트 나열 대신 로우 드라이버(lowInch/lowQty)만 제조사
@@ -743,28 +750,92 @@ function presetGuideHTML(d) {
       : "";
     return `<li>${wrapBreakable(item.text)}${subsHTML}</li>`;
   };
-  // [사용자 요청] notes 배열 항목들이 <div> 로만 이어 붙어 글머리 기호 없이
-  // 문단처럼 붙어 보였다 — <ul><li> 목록으로 바꿔 항목별로 구분되게 한다
-  // (footnote--list 변형자, spec-table.css).
-  const notesListHTML = Array.isArray(p.notes) && p.notes.length
-    ? `<ul class="footnote footnote--list">${p.notes.map(noteItemHTML).join("")}</ul>`
+  // [사용자 요청 — 3개 하위 표 통일 구조] Preset Guide 안의 표 3개(메인/
+  // Matching Ratio/Delay Defaults) 모두 펼치는 즉시 바로 보이고(표 자체는
+  // 더 이상 토글하지 않음), 표마다 그 밑에 "참고 사항" 토글을 하나씩 붙여
+  // 총 3개의 참고 사항 토글이 생기는 구조로 통일한다(전에는 메인 표만
+  // notes 토글이 있고 Delay Defaults는 열자마자 참고 사항까지 다 보이는
+  // 등 표마다 패턴이 달라 일관성이 없었다는 지적). 표 아래 notes+source를
+  // 만드는 공통 헬퍼로 뺀다.
+  const notesBlockHTML = (notes, source, toggleId) => {
+    const listHTML = Array.isArray(notes) && notes.length
+      ? `<ul class="footnote footnote--list">${notes.map(noteItemHTML).join("")}</ul>`
+      : "";
+    const srcHTML = source ? `<div class="footnote">출처: ${esc(source)}</div>` : "";
+    if (!listHTML && !srcHTML) return "";
+    return `<button type="button" class="section-label section-label--toggle section-label--toggle-sub" data-section-toggle="${toggleId}" aria-expanded="false">참고 사항<span class="section-label__arrow">▸</span></button>
+      <div data-section-toggle-body="${toggleId}" hidden>
+        ${listHTML}
+        ${srcHTML}
+      </div>`;
+  };
+  const mainNotesHTML = notesBlockHTML(p.notes, p.source, "spk-preset-guide-notes");
+
+  // Matching Ratio & Minimum Line Length — ratio 또는 minLine이 있는 행만
+  // 모아 별도 표로 보여준다(메인 표에 욱여넣지 않음). 값이 하나도 없으면
+  // 표/제목/참고 사항 전부 렌더하지 않는다.
+  const ratioRows = p.rows.filter(r => r.ratio || r.minLine);
+  const ratioRowsHTML = ratioRows.map(r => `
+      <div class="match-table__row match-table__row--static">
+        <div class="match-table__cell match-table__cell--model">${wrapBreakable(tightenConfigText(r.config))}</div>
+        <div class="match-table__cell">${r.ratio ? wrapBreakable(r.ratio) : "—"}</div>
+        <div class="match-table__cell">${r.minLine ? wrapBreakable(r.minLine) : "—"}</div>
+      </div>`).join("");
+  const ratioSectionHTML = ratioRowsHTML
+    ? `<div class="section-label">Matching Ratio &amp; Minimum Line Length</div>
+      <div class="match-table match-table--preset-guide-ratio">
+        <div class="match-table__row match-table__row--head">
+          <div class="match-table__cell">Loudspeaker Configuration</div>
+          <div class="match-table__cell">Recommended Ratio</div>
+          <div class="match-table__cell">Minimum Line Length</div>
+        </div>
+        <div class="match-table__body">${ratioRowsHTML}</div>
+      </div>
+      ${notesBlockHTML(p.ratioNotes, p.ratioSource, "spk-preset-guide-ratio-notes")}`
     : "";
-  const sourceHTML = p.source ? `<div class="footnote">출처: ${esc(p.source)}</div>` : "";
-  // [사용자 요청] 각주(참고 사항 + 출처)만 별도로 접고 펼칠 수 있게—
-  // Preset Guide 표 자체는 펼쳐도 각주는 평소엔 기본 닫힘 상태로 시작해
-  // 표만 보고 싶을 때 화면을 더 차지하지 않게 한다. 바깥 Preset Guide
-  // 토글과 마찬가지로 wireSectionToggle(ui/modal.js)이 [data-section-toggle]
-  // 를 전부 훑어 자동으로 배선하므로 중첩이어도 별도 JS 수정이 필요 없다.
-  const notesToggleHTML = (notesListHTML || sourceHTML)
-    ? `<button type="button" class="section-label section-label--toggle section-label--toggle-sub" data-section-toggle="spk-preset-guide-notes" aria-expanded="false">참고 사항<span class="section-label__arrow">▸</span></button>
-      <div data-section-toggle-body="spk-preset-guide-notes" hidden>
-        ${notesListHTML}
-        ${sourceHTML}
-      </div>`
+
+  // Delay Defaults — 프리셋 조합별 pre-alignment 딜레이 기본값.
+  // [사용자 요청] 극성 정상(+)은 기본값이라 표시를 생략하고(k-series.data.js
+  // 참고), 반전인 경우만 데이터에 "(−)" 로 표기된다 — wrapBreakable로
+  // &nbsp;/<wbr> 처리를 마친 뒤 그 안의 "−" 기호만(괄호는 일반 색 그대로
+  // 두고) 빨간 글씨 span으로 감싼다(순서 중요: wrapBreakable이 먼저
+  // 끝나야 태그가 깨지지 않는다).
+  // [사용자 요청 — 표 구분 기능] r.items(문자열 배열, K1/K1-SB/KS28 등
+  // 엘리먼트별 값)을 각각 .delay-item span으로 감싸 나열 — CSS
+  // (spec-table.css .delay-item + .delay-item)가 border-left로 위아래
+  // 표 가로선과는 끊긴 짧은 세로 구분선을 그린다(텍스트 "|" 문자 대신
+  // 실제 표 구분선 스타일).
+  const dd = p.delayDefaults;
+  const highlightPolarityFlip = html => html.replace(/−/g, '<span class="polarity-flip">−</span>');
+  const delayRowsHTML = dd && Array.isArray(dd.rows) && dd.rows.length
+    ? dd.rows.map(r => {
+        const itemsHTML = (r.items || []).map(item =>
+          `<span class="delay-item">${highlightPolarityFlip(wrapBreakable(item))}</span>`
+        ).join("");
+        return `
+      <div class="match-table__row match-table__row--static">
+        <div class="match-table__cell match-table__cell--preset">${wrapBreakable(r.combo)}</div>
+        <div class="match-table__cell match-table__cell--delay-items">${itemsHTML}</div>
+      </div>`;
+      }).join("")
     : "";
+  const delaySectionHTML = delayRowsHTML
+    ? `<div class="section-label">Delay Defaults</div>
+      <div class="match-table match-table--preset-guide-delay">
+        <div class="match-table__row match-table__row--head">
+          <div class="match-table__cell">Preset combo</div>
+          <div class="match-table__cell">Pre-alignment delay &amp; Polarity</div>
+        </div>
+        <div class="match-table__body">${delayRowsHTML}</div>
+      </div>
+      ${notesBlockHTML(dd.notes, dd.source, "spk-preset-guide-delay-notes")}`
+    : "";
+
   // [사용자 요청] System Elements/Configurations 와 동일한 섹션 통째
   // 접기/펼치기 패턴(wireSectionToggle, ui/modal.js) — 기본 접힘 상태로
-  // 시작해 모달을 열자마자 긴 표가 화면을 차지하지 않게 한다.
+  // 시작해 모달을 열자마자 긴 표가 화면을 차지하지 않게 한다. Preset
+  // Guide 를 펼치면 표 3개는 전부 바로 보이고, 표별 참고 사항만 각각
+  // 접힌 채로 시작한다.
   return `<button type="button" class="section-label section-label--toggle" data-section-toggle="spk-preset-guide" aria-expanded="false">Preset Guide<span class="section-label__arrow">▸</span></button>
     <div data-section-toggle-body="spk-preset-guide" hidden>
       <div class="match-table match-table--preset-guide">
@@ -775,6 +846,71 @@ function presetGuideHTML(d) {
         </div>
         <div class="match-table__body">${rows}</div>
       </div>
+      ${mainNotesHTML}
+      ${ratioSectionHTML}
+      ${delaySectionHTML}
+    </div>`;
+}
+
+// [사용자 요청] Preset Guide와 동급(섹션 레벨) 토글로 "Mechanical Safety"
+// 섹션 추가 — 오너 매뉴얼 "Mechanical safety" 중 그 제품 자체(K1)에
+// 해당하는 부분만(k-series.data.js mechanicalSafety, K1-SB/KS28/CS1 등
+// 다른 제품의 리깅 한계 표는 제외) 표로 정리. Flown/Stacked 두 표는 항상
+// 바로 보이고(presetGuideHTML의 Matching Ratio/Delay Defaults 표와 동일
+// 패턴), 경고문+참고 사항은 표 아래 별도 토글로 접어둔다 — 텍스트 설명이
+// 길어도 참고 사항 토글 뒤에 가려지므로 누락 없이 전부 옮겨 담는다.
+function mechanicalSafetyHTML(d) {
+  const ms = d.mechanicalSafety;
+  if (!ms) return "";
+  const rowsHTML = rows => (rows || []).map(r => `
+    <div class="match-table__row match-table__row--static">
+      <div class="match-table__cell match-table__cell--model">${wrapBreakable(r.config)}</div>
+      <div class="match-table__cell">${wrapBreakable(r.accessory)}</div>
+      <div class="match-table__cell">${wrapBreakable(r.safeLimit)}</div>
+      <div class="match-table__cell">${wrapBreakable(r.maxLimit)}</div>
+    </div>`).join("");
+  const tableHTML = (title, rowsArr) => rowsArr && rowsArr.length
+    ? `<div class="section-label">${esc(title)}</div>
+      <div class="match-table match-table--mech-safety">
+        <div class="match-table__row match-table__row--head">
+          <div class="match-table__cell">Configuration</div>
+          <div class="match-table__cell">Rigging accessory</div>
+          <div class="match-table__cell">Safe limit</div>
+          <div class="match-table__cell">Maximum limit</div>
+        </div>
+        <div class="match-table__body">${rowsHTML(rowsArr)}</div>
+      </div>`
+    : "";
+  const flownHTML = tableHTML("Flown", ms.flownRows);
+  const stackedHTML = tableHTML("Stacked / Other configurations", ms.stackedRows);
+  // 경고문(원문 warning 아이콘 문단) — 참고 사항과 별개로, 항상 눈에 띄어야
+  // 하는 항목이라 footnote--list 가 아니라 강조된 별도 리스트로 그린다.
+  const warningsHTML = Array.isArray(ms.warnings) && ms.warnings.length
+    ? `<ul class="mech-safety-warning">${ms.warnings.map(w => `<li>${wrapBreakable(w)}</li>`).join("")}</ul>`
+    : "";
+  const noteItemHTML = n => {
+    const item = typeof n === "string" ? { text: n } : n;
+    const subsHTML = Array.isArray(item.subs) && item.subs.length
+      ? `<ul class="footnote__sublist">${item.subs.map(s => `<li>${wrapBreakable(s)}</li>`).join("")}</ul>`
+      : "";
+    return `<li>${wrapBreakable(item.text)}${subsHTML}</li>`;
+  };
+  const notesListHTML = Array.isArray(ms.notes) && ms.notes.length
+    ? `<ul class="footnote footnote--list">${ms.notes.map(noteItemHTML).join("")}</ul>`
+    : "";
+  const sourceHTML = ms.source ? `<div class="footnote">출처: ${esc(ms.source)}</div>` : "";
+  const notesToggleHTML = (notesListHTML || sourceHTML)
+    ? `<button type="button" class="section-label section-label--toggle section-label--toggle-sub" data-section-toggle="spk-mech-safety-notes" aria-expanded="false">참고 사항<span class="section-label__arrow">▸</span></button>
+      <div data-section-toggle-body="spk-mech-safety-notes" hidden>
+        ${notesListHTML}
+        ${sourceHTML}
+      </div>`
+    : "";
+  return `<button type="button" class="section-label section-label--toggle" data-section-toggle="spk-mech-safety" aria-expanded="false">Mechanical Safety<span class="section-label__arrow">▸</span></button>
+    <div data-section-toggle-body="spk-mech-safety" hidden>
+      ${flownHTML}
+      ${stackedHTML}
+      ${warningsHTML}
       ${notesToggleHTML}
     </div>`;
 }
@@ -816,14 +952,98 @@ export function modalBodyHTML(d, resolveAmpId, relatedAccessories) {
   // 사이에 경계선/색 전환 없이 하나로 이어지게 한다.
   const views = getViews(d);
   const viewSlug = label => label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  // [사용자 요청] 스택 그룹(Horizontal/Vertical/... 세로로 쌓인 칸)이 몇
+  // 줄인지에 따라 옆(가로로 나열된) 버튼들의 줄 수를 맞춰야 자연스럽다 —
+  // STACK_LABELS/stackViews 는 뒤에서 계산되지만 그 개수가 아래
+  // parenBodyHTML(줄바꿈 여부 결정)에 필요해 먼저 끌어올려 계산한다.
+  const STACK_LABELS = d.viewStackLabels || ["Horizontal", "Vertical", "Vertical (Panflex)"];
+  const stackCount = views.filter(v => STACK_LABELS.includes(v.label)).length;
+  // [사용자 요청] "Array White (8x + KARAIIi-BUMP)"처럼 괄호 부가설명이
+  // 붙은 뷰 라벨은 괄호가 줄 중간(2번째 줄 시작)과 끝(3번째 줄 끝)에
+  // 걸쳐 보여 미관상 어색했다 — 괄호 자체를 없애고 안의 내용만 별도 줄에
+  // 작고 연한 배지 텍스트(.modal__view-btn-sub)로 보여준다("Array White"
+  // / "8x + KARAIIi-BUMP", 괄호 없이). 괄호 안이 여러 단어일 때만 이렇게
+  // 분리하고, "Vertical (Panflex)"처럼 한 단어뿐이라 이미 한 줄에 들어가는
+  // 라벨은 원문 그대로 괄호까지 포함해 한 줄에 붙여둔다(굳이 뗄 필요 없음).
+  // [사용자 요청] "8x + KARAIIi-BUMP"를 브라우저 기본 word-wrap 에 맡기면
+  // "KARAIIi-BUMP"처럼 하이픈이 든 한 "단어"를 하이픈 지점에서 쪼개
+  // "KARAIIi-" / "BUMP"로 잘랐다 — 하이픈이 든 각 토큰(모델명, 예:
+  // KARAIIi-BUMP)만 white-space: nowrap 인 span 으로 개별 포장해 그 토큰
+  // 내부에서는 쪼개지지 않게 한다.
+  // [사용자 요청 — 줄 수를 스택과 맞춤] 처음엔 폭이 넉넉하면(K1 등, 스택
+  // 2개 이하) <wbr>(공간 부족할 때만 허용)로 자연스럽게 뒀는데, K2처럼
+  // 스택이 3개(Horizontal/Vertical/Panflex Detail = 3줄)인 모델은 옆의
+  // Array/On Chariot 버튼도 폭에 여유가 있어 한 줄로 붙어버려 스택과 줄
+  // 수가 안 맞았다 — 스택이 3개 이상일 때만 첫 "+" 뒤에서 <br> 로 항상
+  // 강제 줄바꿈해 옆 버튼도 2줄(본문+서브)로 맞추고, 스택이 2개 이하(또는
+  // 없음)면 <wbr> 로 폭에 따라 브라우저가 자동 판단하게 둔다.
+  const wrapHyphenTokens = text => esc(text).replace(/[\w]+-[\w-]+/g, m => `<span class="modal__view-btn-sub-nowrap">${m}</span>`);
+  const parenBodyHTML = paren => {
+    const plusIdx = paren.indexOf("+ ");
+    if (plusIdx === -1) return wrapHyphenTokens(paren);
+    const before = paren.slice(0, plusIdx + 1); // 첫 "+"까지 포함
+    const after = paren.slice(plusIdx + 2); // 첫 "+" 다음 나머지 전체
+    const breakTag = stackCount >= 3 ? "<br>" : "<wbr> ";
+    return `${esc(before)}${breakTag}${wrapHyphenTokens(after)}`;
+  };
+  const viewBtnLabelHTML = label => {
+    const i = label.indexOf(" (");
+    if (i === -1) return esc(label);
+    const paren = label.slice(i + 2, -1); // 괄호 자체(양끝 "(", ")") 제거 — i 는 " (" 의 공백 위치라 +2 부터 "(" 다음
+    const hasMultipleWords = / /.test(paren);
+    return hasMultipleWords
+      ? `${esc(label.slice(0, i))}<span class="modal__view-btn-sub">${parenBodyHTML(paren)}</span>`
+      : esc(label);
+  };
+  // [사용자 요청] "Vertical (Panflex)"처럼 괄호 안이 한 단어뿐인 라벨은
+  // <br> 강제분기 없이 한 줄 텍스트 그대로지만, 버튼 폭이 좁으면(스택 칸이
+  // Horizontal/Vertical 같은 짧은 라벨 기준으로 좁게 잡혀서) 브라우저가
+  // 여전히 공백에서 자동 줄바꿈해버려 "Vertical" / "(Panflex)"로 갈라져
+  // 보였다 — 이 라벨들만 white-space: nowrap(modal__view-btn--nowrap)을
+  // 줘 폭이 좁아도 절대 줄바꿈되지 않게 한다. 괄호 안이 여러 단어인 Array
+  // 계열은 그 자연 줄바꿈이 오히려 의도된 동작이라 nowrap 을 주지 않는다.
+  const isNowrapLabel = label => {
+    const i = label.indexOf(" (");
+    if (i === -1) return true;
+    const paren = label.slice(i + 1);
+    return !/ /.test(paren.slice(1, -1));
+  };
+  // 첫 번째 뷰(views[0])가 항상 초기 활성 뷰이므로, 그룹으로 재배치된
+  // 뒤에도 label 로 활성 여부를 판정한다(배열 내 위치 i 에 더 이상
+  // 의존할 수 없으므로). views 가 빈 배열(이미지 없는 모델)일 수 있어
+  // views[0]?.label 로 안전하게 접근 — 아래 media 는 views.length 를
+  // 먼저 체크해 이 경우 viewSwitchHTML 자체를 쓰지 않는다.
+  const firstLabel = views[0]?.label;
+  const viewBtnHTML = v =>
+    `<button type="button" class="modal__view-btn${isNowrapLabel(v.label) ? " modal__view-btn--nowrap" : ""}${v.label === firstLabel ? " is-active" : ""}" data-view-switch="${viewSlug(v.label)}">${viewBtnLabelHTML(v.label)}</button>`;
+  // [사용자 요청 — Kara IIi 등 뷰가 6개까지 늘어난 모델] 버튼이 많아지자
+  // 한 줄에 다 안 들어가 "Array White (8x + KARAIIi-BUMP)"처럼 긴 라벨이
+  // 여러 줄로 꺾여 줄 수가 들쭉날쭉해 보였다 — 라벨이 짧고 항상 함께
+  // 다니는 "앵글" 계열 뷰만 별도로 세로로 쌓은 그룹
+  // (.modal__view-switch-stack)으로 묶어 가로 폭을 한 칸만 차지하게 하고,
+  // 나머지(Array/With SB18 등 부가 설명이 긴 뷰)는 기존처럼 가로로
+  // 나열한다. 어떤 라벨을 묶을지는 모델마다 다를 수 있어(예: K2 는
+  // "Panflex Detail"까지 포함) d.viewStackLabels(문자열 배열)로 지정할 수
+  // 있게 하고, 지정이 없으면 기본값(Horizontal/Vertical/Vertical
+  // (Panflex))을 쓴다(STACK_LABELS 는 위에서 이미 계산). 이 라벨들이
+  // 없거나 2개 이하인 모델(K1 등 뷰가 적은 모델)은 stackViews.length <= 1
+  // 이라 전부 기존 가로 나열로 남는다 — 하위 호환.
+  const stackViews = views.filter(v => STACK_LABELS.includes(v.label));
+  const restViews = views.filter(v => !STACK_LABELS.includes(v.label));
+  const viewSwitchHTML = stackViews.length > 1
+    ? `<div class="modal__view-switch modal__view-switch--grouped" role="group" aria-label="이미지 보기 선택">
+        <div class="modal__view-switch-stack">${stackViews.map(viewBtnHTML).join("")}</div>
+        ${restViews.map(viewBtnHTML).join("")}
+      </div>`
+    : `<div class="modal__view-switch" role="group" aria-label="이미지 보기 선택">
+        ${views.map(viewBtnHTML).join("")}
+      </div>`;
   const media = views.length
     ? `<div class="modal__media-wrap">
         <div class="modal__media">
-          ${views.map((v, i) => `<img class="modal__img" data-view="${viewSlug(v.label)}" src="${v.src}" alt="${esc(d.name)} ${esc(v.label)}"${i === 0 ? "" : " hidden"}>`).join("")}
+          ${views.map((v, i) => `<img class="modal__img" data-view="${viewSlug(v.label)}" data-view-label="${esc(v.label)}" src="${v.src}" alt="${esc(d.name)} ${esc(v.label)}"${i === 0 ? "" : " hidden"}>`).join("")}
         </div>
-        <div class="modal__view-switch" role="group" aria-label="이미지 보기 선택">
-          ${views.map((v, i) => `<button type="button" class="modal__view-btn${i === 0 ? " is-active" : ""}" data-view-switch="${viewSlug(v.label)}">${esc(v.label)}</button>`).join("")}
-        </div>
+        ${viewSwitchHTML}
       </div>`
     : "";
   const M = MFR[d.mk], color = M.color;
@@ -879,6 +1099,7 @@ export function modalBodyHTML(d, resolveAmpId, relatedAccessories) {
       <p class="section-label">Amplifier Matching</p>
       ${ampMatchingHTML(d, resolveAmpId)}
       ${presetGuideHTML(d)}
+      ${mechanicalSafetyHTML(d)}
     </div>`;
   return { color, head, body };
 }

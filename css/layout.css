@@ -124,6 +124,31 @@
 .media-toggle[aria-pressed="true"] .media-toggle__icon--on { display: none; }
 .media-toggle[aria-pressed="true"] .media-toggle__icon--off { display: block; }
 
+/* ---------- 블록: motion-toggle (전체 애니메이션/트랜지션 켜기·끄기) ----------
+   [사용자 요청] theme-toggle/media-toggle 과 동일 패턴 — 사진 확대 pane
+   접힘, 카드 hover 크로스페이드 등 사이트 전반의 모션을 한 번에 끄는
+   전역 토글. 실제 처리는 body.reduce-motion 상태에서 css/base.css 의
+   전역 규칙(모든 transition/animation 을 0s 로 강제)이 담당, 이 버튼은
+   트리거일 뿐이다(js/ui/motion-toggle.js 참고). */
+.motion-toggle {
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.motion-toggle:hover { color: var(--accent); border-color: var(--accent-line); }
+.motion-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.motion-toggle__icon { grid-area: 1 / 1; }
+.motion-toggle__icon--off { display: none; }
+.motion-toggle[aria-pressed="true"] .motion-toggle__icon--on { display: none; }
+.motion-toggle[aria-pressed="true"] .motion-toggle__icon--off { display: block; }
+
 /* ---------- 블록: legend (제조사 색상 범례) ---------- */
 .legend { display: flex; gap: 16px; flex-wrap: wrap; }
 .legend__item {

@@ -150,6 +150,13 @@
    조합(0,0,2)이라 특이도가 .card__img--wide 단일 클래스(0,0,1)보다 높다
    — 그래서 max-width:100% 를 줘도 계속 80%가 이겨서 좌우 여백이 남았다.
    .card__media 를 접두어로 붙여 특이도를 맞추고 나서야 실제로 오버라이드된다. */
+/* [사용자 요청] K1 은 다른 K시리즈 카드에 맞춰 재크롭한 뒤에도 원본
+   자체(캔버스 대비 콘텐츠 비율)가 크지 않아 상대적으로 작아 보인다 —
+   이 카드만 예외로 이미지를 조금 더 키운다. */
+.card[data-id="spk-la-k1"] .card__media img {
+  max-height: 122px;
+  max-width: 92%;
+}
 .card__media img.card__img--wide {
   width: 96%;
   max-width: 96%;
@@ -194,7 +201,11 @@
    숨긴다 — 영역 자체를 접어(display:none) 사진이 차지하던 132px 만큼
    카드가 압축되게 한다(js/ui/media-toggle.js, index.html #media-toggle
    참고). 모든 도메인 카드가 .card__media 를 공유하므로 이 규칙 하나로
-   전 탭에 적용된다. */
+   전 탭에 적용된다.
+   [시도했다가 되돌림] max-height/opacity 트랜지션으로 부드럽게 접히게
+   해봤으나, 카드 여러 장이 그리드에서 동시에 커졌다 작아졌다 하는 모습이
+   오히려 산만하고 어색하다는 피드백으로 즉시 전환(display:none)으로
+   되돌렸다. */
 .hide-media .card__media { display: none; }
 /* [Front/Rear 호버 전환] imgBack 이 있는 카드만 두 <img> 가 함께 렌더링된다
    (speakers.view.js cardHTML 참조). 평소엔 앞모습만 보이고, 카드에 마우스를

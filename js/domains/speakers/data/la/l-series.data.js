@@ -54,11 +54,11 @@ export const LA_L_SERIES = [
       }
     ],
     "ampRaw": "LA7.16(1/1)",
-    "img": "assets/img/speakers/la/l-series/spk-la-l2.webp",
+    "img": "assets/img/speakers/la/l-series/spk-la-l2-front.webp",
     "views": [
       {
         "label": "Front",
-        "src": "assets/img/speakers/la/l-series/spk-la-l2.webp"
+        "src": "assets/img/speakers/la/l-series/spk-la-l2-front.webp"
       },
       {
         "label": "Rear",
@@ -69,18 +69,11 @@ export const LA_L_SERIES = [
         "src": "assets/img/speakers/la/l-series/spk-la-l2-array.webp"
       },
       {
-        "label": "Alt",
-        "src": "assets/img/speakers/la/l-series/spk-la-l2-alt.webp"
-      },
-      {
-        "label": "Line",
-        "src": "assets/img/speakers/la/l-series/spk-la-l2-line.webp"
-      },
-      {
         "label": "On Chariot",
         "src": "assets/img/speakers/la/l-series/spk-la-l2-chariot.webp"
       }
     ],
+    "cardHoverView": "Array",
     "relations": {
       "ampIds": []
     },
@@ -138,11 +131,11 @@ export const LA_L_SERIES = [
       }
     ],
     "ampRaw": "LA7.16(1/1)",
-    "img": "assets/img/speakers/la/l-series/spk-la-l2d.webp",
+    "img": "assets/img/speakers/la/l-series/spk-la-l2d-front.webp",
     "views": [
       {
         "label": "Front",
-        "src": "assets/img/speakers/la/l-series/spk-la-l2d.webp"
+        "src": "assets/img/speakers/la/l-series/spk-la-l2d-front.webp"
       },
       {
         "label": "Rear",
@@ -150,21 +143,14 @@ export const LA_L_SERIES = [
       },
       {
         "label": "Array",
-        "src": "assets/img/speakers/la/l-series/spk-la-l2d-array.webp"
-      },
-      {
-        "label": "Alt",
-        "src": "assets/img/speakers/la/l-series/spk-la-l2d-alt.webp"
-      },
-      {
-        "label": "Line",
-        "src": "assets/img/speakers/la/l-series/spk-la-l2-line.webp"
+        "src": "assets/img/speakers/la/l-series/spk-la-l2-array.webp"
       },
       {
         "label": "On Chariot",
         "src": "assets/img/speakers/la/l-series/spk-la-l2-chariot.webp"
       }
     ],
+    "cardHoverView": "Rear",
     "relations": {
       "ampIds": []
     },
@@ -215,10 +201,11 @@ export const LA_L_SERIES = [
         "src": "assets/img/speakers/la/l-series/spk-la-l1-rear.webp"
       },
       {
-        "label": "Array",
+        "label": "Array (L1x2 + L1Dx1 + CS1x1)",
         "src": "assets/img/speakers/la/l-series/spk-la-l1-array.webp"
       }
     ],
+    "cardHoverView": "Array (L1x2 + L1Dx1 + CS1x1)",
     "relations": {
       "ampIds": []
     },
@@ -270,10 +257,11 @@ export const LA_L_SERIES = [
         "src": "assets/img/speakers/la/l-series/spk-la-l1d-rear.webp"
       },
       {
-        "label": "Array",
+        "label": "Array (L1x2 + L1Dx1 + CS1x1)",
         "src": "assets/img/speakers/la/l-series/spk-la-l1-array.webp"
       }
     ],
+    "cardHoverView": "Rear",
     "relations": {
       "ampIds": []
     },
